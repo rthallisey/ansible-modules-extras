@@ -124,6 +124,14 @@ EXAMPLES = '''
     file_reference: /path/to/create_namespace.yaml
     state: present
 
+# Get information about a running Replication Controller
+- name: Getting Replication Controller info
+  kubernetes:
+    api_endpoint: 123.45.67.89
+    username: admin
+    password: redacted
+    file_reference: /path/to/running_rc.yaml
+    state: get
 '''
 
 RETURN = '''
@@ -301,6 +309,22 @@ def k8s_update_resource(module, url, data):
     return True, body
 
 
+def k8s_get_resource(module, url, data):
+    name = data.get('metadata', {}).get('name')
+    if name is None:
+        module.fail_json(msg="Missing a named resource in object metadata when trying to update a resource")
+
+    url = url + '/' + name
+    info, body = api_request(module, url, method="GET")
+    if info['status'] == 409:
+        name = data["metadata"].get("name", None)
+        info, body = api_request(module, url + "/" + name)
+        return False, body
+    elif info['status'] >= 400:
+        module.fail_json(msg="failed to get the resource '%s': %s" % (name, info['msg']), url=url)
+    return True, body
+
+
 def main():
     module = AnsibleModule(
         argument_spec=dict(
@@ -315,7 +339,7 @@ def main():
             api_endpoint=dict(required=True),
             file_reference=dict(required=False),
             inline_data=dict(required=False),
-            state=dict(default="present", choices=["present", "absent", "update", "replace"])
+            state=dict(default="present", choices=["present", "absent", "update", "replace", "get"])
         ),
         mutually_exclusive = (('file_reference', 'inline_data'), ('username', 'insecure'), ('password', 'insecure')),
         required_one_of = (('file_reference', 'inline_data'),),
@@ -376,6 +400,8 @@ def main():
             item_changed, item_body = k8s_replace_resource(module, url, item)
         elif state == 'update':
             item_changed, item_body = k8s_update_resource(module, url, item)
+        elif state == 'get':
+            item_changed, item_body = k8s_get_resource(module, url, item)
 
         changed |= item_changed
         body.append(item_body)
