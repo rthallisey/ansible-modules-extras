@@ -200,6 +200,7 @@ import base64
 KIND_URL = {
     "binding": "/api/v1/namespaces/{namespace}/bindings",
     "endpoints": "/api/v1/namespaces/{namespace}/endpoints",
+    "job": "/apis/batch/v1/namespaces/{namespace}/jobs",
     "limitrange": "/api/v1/namespaces/{namespace}/limitranges",
     "namespace": "/api/v1/namespaces",
     "node": "/api/v1/nodes",
