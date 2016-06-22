@@ -132,6 +132,16 @@ EXAMPLES = '''
     password: redacted
     file_reference: /path/to/running_rc.yaml
     state: get
+
+# Get all the information about a Replication Controller
+# Including any pods, containers, and their statuses
+- name: Getting Replication Controller status
+  kubernetes:
+    api_endpoint: 123.45.67.89
+    username: admin
+    password: redacted
+    file_reference: /path/to/running_rc.yaml
+    state: debug
 '''
 
 RETURN = '''
@@ -326,6 +336,28 @@ def k8s_get_resource(module, url, data):
     return True, body
 
 
+def k8s_get_resource_status(module, url, data):
+    info, body = api_request(module, url, method="GET")
+    if info['status'] >= 400:
+        module.fail_json(msg="failed to get the resource '%s': %s" % (name, info['msg']), url=url)
+
+    pod_name = data.get('metadata', {}).get('name')
+    for pod in body['items']:
+        p = pod['metadata']['name'].rsplit('-', 1)
+        try:
+            if pod_name == p[0]:
+                pod_name = pod['metadata']['name']
+                break
+        except:
+            pass
+
+    url = url + '/' + pod_name
+    info, body = api_request(module, url, method="GET")
+    if info['status'] >= 400:
+        module.fail_json(msg="failed to get the resource '%s': %s" % (name, info['msg']), url=url)
+    return True, body
+
+
 def main():
     module = AnsibleModule(
         argument_spec=dict(
@@ -340,7 +372,8 @@ def main():
             api_endpoint=dict(required=True),
             file_reference=dict(required=False),
             inline_data=dict(required=False),
-            state=dict(default="present", choices=["present", "absent", "update", "replace", "get"])
+            state=dict(default="present", choices=["present", "absent", "update"
+                                                   , "replace", "get", "debug"])
         ),
         mutually_exclusive = (('file_reference', 'inline_data'), ('username', 'insecure'), ('password', 'insecure')),
         required_one_of = (('file_reference', 'inline_data'),),
@@ -403,6 +436,10 @@ def main():
             item_changed, item_body = k8s_update_resource(module, url, item)
         elif state == 'get':
             item_changed, item_body = k8s_get_resource(module, url, item)
+        elif state == 'debug':
+            pod_url = target_endpoint + KIND_URL['pod']
+            pod_url = pod_url.replace("{namespace}", namespace)
+            item_changed, item_body = k8s_get_resource_status(module, pod_url, item)
 
         changed |= item_changed
         body.append(item_body)
