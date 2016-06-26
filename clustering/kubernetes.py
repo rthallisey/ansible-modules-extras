@@ -84,7 +84,9 @@ options:
     required: false
     default: false
 
-author: "Eric Johnson (@erjohnso) <erjohnso@google.com>"
+authors:
+  - "Eric Johnson (@erjohnso) <erjohnso@google.com>"
+  - "Ryan Hallisey (@rthallisey) <rhallise@redhat.com>"
 '''
 
 EXAMPLES = '''
@@ -123,6 +125,26 @@ EXAMPLES = '''
     insecure: true
     file_reference: /path/to/create_namespace.yaml
     state: present
+
+# Create a configmap
+- name: Create a configmap
+  kubernetes:
+    api_endpoint: 123.45.67.89
+    username: admin
+    password: redacted
+    file_reference: /path/to/configmap.yaml
+    state: present
+
+# Configmap format
+# Load configmap data from the files specified in the path
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my_configmap
+data:
+  file.json: /path/to/file.json
+  file.conf: /path/to/file.conf
+  file.sh: /path/to/file.sh
 
 # Get information about a running Replication Controller
 - name: Getting Replication Controller info
@@ -209,6 +231,7 @@ import base64
 
 KIND_URL = {
     "binding": "/api/v1/namespaces/{namespace}/bindings",
+    "configmap": "/api/v1/namespaces/{namespace}/configmaps",
     "endpoints": "/api/v1/namespaces/{namespace}/endpoints",
     "job": "/apis/batch/v1/namespaces/{namespace}/jobs",
     "limitrange": "/api/v1/namespaces/{namespace}/limitranges",
@@ -425,6 +448,20 @@ def main():
             url = url.replace("{namespace}", namespace)
         else:
             url = target_endpoint
+
+        if kind == 'configmap':
+            configfile_names = item.get('data').keys()
+            for name in configfile_names:
+                configfile_path = item.get('data').get(name)
+                try:
+                    f = open(configfile_path, "r")
+                    data = f.read()
+                    f.close()
+                    if not data:
+                        module.fail_json(msg="No valid data could be found.")
+                except:
+                    module.fail_json(msg="The file '%s' was not found or contained invalid data" % file_reference)
+                item['data'][name] = data
 
         if state == 'present':
             item_changed, item_body = k8s_create_resource(module, url, item)
